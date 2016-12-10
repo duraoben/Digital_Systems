@@ -1,0 +1,279 @@
+/* 
+	Ben Durao
+
+	CS 354 - Digital Design
+   Template for the CPU project (Project 3)
+
+   This file compiles. Don't change the existing code, only add more code 
+   using the instructions given as comment.
+*/
+
+module cpu (Instruction, WriteData, CLK);
+   input [8:0] Instruction;
+   input CLK;
+   output [3:0] WriteData;
+
+   wire [3:0] A,B;
+   wire [8:0] IR;
+// Declare more wires as needed
+   wire [3:0] result;
+
+
+/* The instruction register is instantiated below. You have to provide 
+   the module definition (the module header and ports are already provided
+   below). The OP code and other fiels of this register that have to be 
+   passed to other modules must be represented by their respective 
+   indices (see the register file instance below).
+*/
+   instr_reg instr(Instruction,IR,CLK);
+
+
+// Define a module for the quadruple 2x1 mux and instatiate it here.
+	multiplexor_quad mux(IR[5:2], result, WriteData, select);
+
+// Define a module for the LI decoder and instantiate it here.
+	li_decode lid(IR[8:6], select);
+
+// register file (the module definition is incuded in this file)
+
+   regfile regs(IR[5:4],IR[3:2],IR[1:0],WriteData,A,B,CLK);
+
+
+// Define a module for the ALU and instantiate it here.
+	ALU alu (IR[8:6],A,B,result,zero, Overflow);
+endmodule
+
+module multiplexor_quad(in0, in1, out, select);
+	input [3:0] in0, in1;
+	input select;
+	output [3:0] out;
+
+	multiplexor_2 mux1(in0[0],in1[0],select,out[0]);
+	multiplexor_2 mux2(in0[1],in1[1],select,out[1]);
+	multiplexor_2 mux3(in0[2],in1[2],select,out[2]);
+	multiplexor_2 mux4(in0[3],in1[3],select,out[3]);
+
+endmodule
+
+module half_adder(A,B,S,C);
+    input A,B;
+    output S,C;
+    wire w,x,y,z;
+    
+    not g2(x,A),
+        g3(y,B);
+    or g1(z,A,B),
+        g4(w,x,y);
+    and g5(S,w,z);
+    not g6(C,w);
+endmodule
+
+module full_adder(X,Y,Z,S,C);
+    input X,Y,Z;
+    output S,C;
+    wire S1,C1,C2;
+    
+    half_adder ha1(X,Y,S1,C1);
+    half_adder ha2(S1,Z,S,C2);
+    or g1(C,C1,C2);
+endmodule
+
+module multiplexor_2(x,y,z,O);
+    input x,y,z;
+    output O;
+    wire d0,d1,enable;
+
+    not g1(enable,z);
+    and g2(d0, x, enable),
+    g3(d1, y, z);
+    or g4(O, d0, d1);
+endmodule
+
+module multiplexor_4(i0,i1,i2,i3,op,O);
+    input i0,i1,i2,i3;
+    input [1:0]op;
+    output O;
+    wire d0,d1,d2,d3,set0,set1;
+    
+    not n1(set0,op[0]),
+        n2(set1,op[1]);
+        
+    and a1(d0, i0, set1, set0),
+        a2(d1, i1, set1, op[0]),
+        a3(d2, i2, op[1], set0),
+        a4(d3, i3, op[1], op[0] );
+
+    or o1(O, d0,d1,d2,d3);
+endmodule
+
+module one_bit_alu(A,B,op,Cin,binv,less,Result,Cout);
+    input A, B, Cin,binv,less;
+    input [1:0]op;
+    output Result, Cout;
+    wire d0, d1, d2, not_b, new_b;
+    
+    not n0(not_b, B);
+    multiplexor_2 binverter(B, not_b, binv, new_b);
+    and g1(d0,A,new_b);
+    or g2(d1,A,new_b);
+    full_adder fa(A,new_b,Cin,d2,Cout);
+    multiplexor_4 mux(d0,d1,d2,less,op,Result);
+endmodule
+
+module one_bit_alu_last(A,B,op,Cin,binv,less,Result,Cout,d2);
+    input A, B, Cin,binv,less;
+    input [1:0]op;
+    output Result, Cout, d2;
+    wire d0, d1, d2, not_b, new_b;
+    
+    not n0(not_b, B);
+    multiplexor_2 binverter(B, not_b, binv, new_b);
+    and g1(d0,A,new_b);
+    or g2(d1,A,new_b);
+    full_adder fa(A,new_b,Cin,d2,Cout);
+    multiplexor_4 mux(d0,d1,d2,less,op,Result);
+endmodule
+
+module ALU (ALUctl, A, B, ALUOut, Zero, Overflow);
+
+   input [2:0] ALUctl;
+   input [3:0] A,B;
+   output [3:0] ALUOut;
+   output Zero, Overflow;
+   wire set,C0,C1,C2,C3, z;
+   
+   one_bit_alu alu_0(A[0],B[0],ALUctl[1:0],ALUctl[2],ALUctl[2],set,ALUOut[0],C0),
+			   alu_1(A[1],B[1],ALUctl[1:0],C0,ALUctl[2],0,ALUOut[1],C1),
+			   alu_2(A[2],B[2],ALUctl[1:0],C1,ALUctl[2],0,ALUOut[2],C2);
+	one_bit_alu_last alu_3(A[3],B[3],ALUctl[1:0],C2,ALUctl[2],0,ALUOut[3],C3, set);
+	
+	xor x1(Overflow, C2, C3);
+	or o1(z, ALUOut[0], ALUOut[1], ALUOut[2], ALUOut[3]);
+	not n0(Zero, z);
+   
+endmodule
+
+// Instruction register. Must be completed. 
+module D_flip_flop(D,CLK,Q);
+   input D,CLK; 
+   output Q; 
+   wire CLK1, Y;
+   not  not1 (CLK1,CLK);
+   D_latch D1(D,CLK, Y),
+           D2(Y,CLK1,Q);
+endmodule 
+
+
+module D_latch(D,C,Q);
+   input D,C; 
+   output Q;
+   wire x,y,D1,Q1; 
+   nand nand1 (x,D, C), 
+        nand2 (y,D1,C), 
+        nand3 (Q,x,Q1),
+        nand4 (Q1,y,Q); 
+   not  not1  (D1,D);
+endmodule 
+
+module instr_reg (Instruction,IR,CLK);
+   input [8:0] Instruction;
+   input CLK;
+   output [8:0] IR;
+
+	// add D flip-flops here  
+	D_flip_flop d1(Instruction[0],CLK,IR[0]),
+				d2(Instruction[1],CLK,IR[1]),
+				d3(Instruction[2],CLK,IR[2]),
+				d4(Instruction[3],CLK,IR[3]),
+				d5(Instruction[4],CLK,IR[4]),
+				d6(Instruction[5],CLK,IR[5]),
+				d7(Instruction[6],CLK,IR[6]),
+				d8(Instruction[7],CLK,IR[7]),
+				d9(Instruction[8],CLK,IR[8]);
+
+endmodule
+
+// LI Decoder
+module li_decode(in, li);
+	input [2:0] in;
+	output li;
+	wire in0, in1;
+	
+	not n1(in0, in[0]),
+		n2(in1, in[1]);
+		
+	nand n3(li, in0, in1, in[2]);
+
+endmodule
+
+
+
+/* 4-bit register file implemented in behavioral modeling (don't change it). 
+   Dont't use behavioral modeling for the other CPU modules. They 
+   must be implemented at gate level (no reg data, assign, and always).
+*/
+
+module regfile (ReadReg1,ReadReg2,WriteReg,WriteData,ReadData1,ReadData2,CLK);
+  input [1:0] ReadReg1,ReadReg2,WriteReg;
+  input [3:0] WriteData;
+  input CLK;
+  output [3:0] ReadData1,ReadData2;
+  reg [3:0] Regs[0:3]; 
+  assign ReadData1 = Regs[ReadReg1];
+  assign ReadData2 = Regs[ReadReg2];
+  initial Regs[0] = 0;
+  always @(negedge CLK)
+     Regs[WriteReg] <= WriteData;
+endmodule
+
+
+// Test module. Add more instructions as provided in the test program.
+
+module test_cpu;
+   reg [8:0] Instruction;
+   reg CLK;
+   wire [3:0] WriteData;
+   cpu cpu1 (Instruction, WriteData, CLK);
+
+   initial
+   begin
+        Instruction = 9'b100111110; // LI  $2, 15  # load decimal 15 in $2
+      #1 CLK=1;
+      #1 CLK=0; // negative edge - execute instruction
+	    Instruction = 9'b100100011; // LI  $3, 8  # load decimal 8 in $3
+      #1 CLK=1;
+      #1 CLK=0; // negative edge - execute instruction
+		Instruction = 9'b000101101; // AND  $1, $2, $3  # $1 = $2 AND $3 (two's complement -8)
+      #1 CLK=1;
+      #1 CLK=0; // negative edge - execute instruction
+		Instruction = 9'b110011011; // SUB $3, $1, $2   # $3 = $1 - $2 = -8 - (-1) = -7 
+      #1 CLK=1;
+      #1 CLK=0; // negative edge - execute instruction
+	  	Instruction = 9'b111110010; // SLT $2, $3, $0   # $2 = 1 ($3 < 0)
+      #1 CLK=1;
+      #1 CLK=0; // negative edge - execute instruction
+	  	Instruction = 9'b010101101; // ADD $1, $2, $3   # $1 = $2 + $3 = 1 + (-7) = -6 
+      #1 CLK=1;
+      #1 CLK=0; // negative edge - execute instruction	  
+	  	Instruction = 9'b110000101; // SUB $1, $0, $1   # $1 = $0 - $1 = 0 - (-6) = 6  
+      #1 CLK=1;
+      #1 CLK=0; // negative edge - execute instruction
+	  	Instruction = 9'b001011011; // OR  $3, $1, $2   # $3 = $1 OR $2 = 7
+      #1 CLK=1;
+      #1 CLK=0; // negative edge - execute instruction
+/* Add machine code for the test program instructions here.
+   Use the format shown above. Pay attention to the register
+   order - the destination register is first in the assembly code
+   and last (LSB) in the machine code.
+   After each instruction a negative edge must be generated.
+*/
+
+   end
+
+   initial
+   begin
+      $display("\nCLK Instruction WriteData\n-------------------------"); 
+      $monitor("%b   %b   %b", CLK, Instruction, WriteData);
+   end
+
+endmodule
