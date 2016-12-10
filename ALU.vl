@@ -1,0 +1,161 @@
+module half_adder(A,B,S,C);
+    input A,B;
+    output S,C;
+    wire w,x,y,z;
+    
+    not g2(x,A),
+        g3(y,B);
+    or g1(z,A,B),
+        g4(w,x,y);
+    and g5(S,w,z);
+    not g6(C,w);
+endmodule
+
+module full_adder(X,Y,Z,S,C);
+    input X,Y,Z;
+    output S,C;
+    wire S1,C1,C2;
+    
+    half_adder ha1(X,Y,S1,C1);
+    half_adder ha2(S1,Z,S,C2);
+    or g1(C,C1,C2);
+endmodule
+
+module multiplexor_2(x,y,z,O);
+    input x,y,z;
+    output O;
+    wire d0,d1,enable;
+
+    not g1(enable,z);
+    and g2(d0, x, enable),
+		g3(d1, y, z);
+    or g4(O, d0, d1);
+endmodule
+
+module multiplexor_4(i0,i1,i2,i3,op,O);
+    input i0,i1,i2,i3;
+    input [1:0]op;
+    output O;
+    wire d0,d1,d2,d3,set0,set1;
+    
+    not n1(set0,op[0]),
+        n2(set1,op[1]);
+        
+    and a1(d0, i0, set1, set0),
+        a2(d1, i1, set1, op[0]),
+        a3(d2, i2, op[1], set0),
+        a4(d3, i3, op[1], op[0] );
+
+    or o1(O, d0,d1,d2,d3);
+endmodule
+
+module one_bit_alu(A,B,op,Cin,binv,less,Result,Cout);
+    input A, B, Cin,binv,less;
+    input [1:0]op;
+    output Result, Cout;
+    wire d0, d1, d2, not_b, new_b;
+    
+    not n0(not_b, B);
+    multiplexor_2 binverter(B, not_b, binv, new_b);
+    and g1(d0,A,new_b);
+    or g2(d1,A,new_b);
+    full_adder fa(A,new_b,Cin,d2,Cout);
+    multiplexor_4 mux(d0,d1,d2,less,op,Result);
+endmodule
+
+module one_bit_alu_last(A,B,op,Cin,binv,less,Result,Cout,d2);
+    input A, B, Cin,binv,less;
+    input [1:0]op;
+    output Result, Cout, d2;
+    wire d0, d1, d2, not_b, new_b;
+    
+    not n0(not_b, B);
+    multiplexor_2 binverter(B, not_b, binv, new_b);
+    and g1(d0,A,new_b);
+    or g2(d1,A,new_b);
+    full_adder fa(A,new_b,Cin,d2,Cout);
+    multiplexor_4 mux(d0,d1,d2,less,op,Result);
+endmodule
+
+module ALU (ALUctl, A, B, ALUOut, Zero, Overflow);
+
+   input [2:0] ALUctl;
+   input [3:0] A,B;
+   output [3:0] ALUOut;
+   output Zero, Overflow;
+   wire set,C0,C1,C2,C3, z;
+   
+   one_bit_alu alu_0(A[0],B[0],ALUctl[1:0],ALUctl[2],ALUctl[2],set,ALUOut[0],C0),
+			   alu_1(A[1],B[1],ALUctl[1:0],C0,ALUctl[2],0,ALUOut[1],C1),
+			   alu_2(A[2],B[2],ALUctl[1:0],C1,ALUctl[2],0,ALUOut[2],C2);
+	one_bit_alu_last alu_3(A[3],B[3],ALUctl[1:0],C2,ALUctl[2],0,ALUOut[3],C3, set);
+	
+	xor x1(Overflow, C2, C3);
+	or o1(z, ALUOut[0], ALUOut[1], ALUOut[2], ALUOut[3]);
+	not n0(Zero, z);
+   
+endmodule
+
+/*
+module t_one_bit_alu;
+    reg A,B,Cin,binv,less;
+    reg [1:0]op;
+    wire R, Cout;
+    
+    one_bit_alu oba(A,B,op,Cin,binv,less,R,Cout);
+    
+    initial
+        begin
+        $display("Time A B op Cin binv less R Cout");
+            A=0; B=0; op=00; Cin=0; binv=0; less=0;
+            #10 A=0; B=1; op=00; Cin=0; binv=0; less=0;
+            #10 A=1; B=0; op=00; Cin=0; binv=0; less=0;
+            #10 A=1; B=1; op=00; Cin=0; binv=0; less=0;
+			#10 A=0; B=0; op=01; Cin=0; binv=0; less=0;
+            #10 A=0; B=1; op=01; Cin=0; binv=0; less=0;
+            #10 A=1; B=0; op=01; Cin=0; binv=0; less=0;
+            #10 A=1; B=1; op=01; Cin=0; binv=0; less=0;
+			#10 A=0; B=0; op=10; Cin=0; binv=0; less=0;
+            #10 A=0; B=1; op=10; Cin=0; binv=0; less=0;
+            #10 A=1; B=0; op=10; Cin=0; binv=0; less=0;
+            #10 A=1; B=1; op=10; Cin=0; binv=0; less=0;
+			#10 A=0; B=0; op=10; Cin=0; binv=1; less=0;
+            #10 A=0; B=1; op=10; Cin=0; binv=1; less=0;
+            #10 A=1; B=0; op=10; Cin=0; binv=1; less=0;
+            #10 A=1; B=1; op=10; Cin=0; binv=1; less=0;
+        end
+    
+    initial
+        $monitor("%4d %b %b %b %b %b %b %b %b", $time, A,B,op,Cin,binv,less,R,Cout);
+endmodule
+*/
+module testALU;
+   reg signed [3:0] a;
+   reg signed [3:0] b;
+   reg [2:0] op;
+   wire signed [3:0] result;
+   wire zero, Overflow;
+	
+   ALU alu (op,a,b,result,zero, Overflow);
+	
+   initial
+      begin
+
+	    op = 3'b000; a = 7; b = 1;  // AND
+	#10 op = 3'b001; a = 5; b = 2;  // OR
+	#10 op = 3'b010; a = 5; b = 1;  // ADD
+	#10 op = 3'b010; a = 7; b = 1;  // ADD
+	#10 op = 3'b010; a = 5; b = -1;  // ADD
+	#10 op = 3'b010; a = -2; b = 1;  // ADD
+	#10 op = 3'b110; a = -1; b = 1;  // SUB
+	#10 op = 3'b110; a = 5; b = 1;  // SUB
+	#10 op = 3'b110; a = 4; b = -1;  // SUB
+	#10 op = 3'b111; a = 5; b = 1;  // SLT
+	#10 op = 3'b111; a = -2; b = -1;  // SLT
+
+      end
+
+   initial
+    $monitor ("op = %b a = %d(%b) b = %d(%b) result = %d(%b) zero = %b overflow = %b",op,a,a,b,b,result,result,zero, Overflow);
+
+endmodule
